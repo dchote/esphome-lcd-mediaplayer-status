@@ -14,6 +14,7 @@ I havent been able to get this to cleanly restart after OTAs, you will need to p
 You will need to have the relevant fonts available for ESPHome to use. 
 - Download the NotoSans font from Google and place `NotoSans-VariableFont_wdth,wght.ttf` into `/config/esphome/fonts`.
 - Find and download `fa-solid-900.ttf` into `/config/esphome/fonts`.
+- Land a jpeg at `/config/www/placeholder.jpg` to become the placeholder album art image.
 
 
 
