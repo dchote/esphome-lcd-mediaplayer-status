@@ -1,10 +1,10 @@
 # esphome-lcd-mediaplayer-status
 ![Example of code running](images/running_on_panel.jpg)
 
-Homeassistant Media Player Status on waveshare-esp32-s3-touch-lcd-7 hardware.
+Home Assistant Media Player Status on waveshare-esp32-s3-touch-lcd-7 hardware.
 
 It is entirely self-contained and will display album art, track, artist, and album information.  
-There is a switch exposed to HomeAssistant that lets you configure whether the display stays on, or turns off when media isnt playing.
+There is a switch exposed to Home Assistant that lets you configure whether the display stays on, or turns off when media isnt playing.
 
 This code was almost entirely created using ChatGPT and many iterations to get something that actually works and looks good. 
 It was initially based on the clock example from https://github.com/inytar/waveshare-esp32-s3-touch-lcd-7-esphome.
