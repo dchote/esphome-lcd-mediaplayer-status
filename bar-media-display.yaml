@@ -1,5 +1,5 @@
 substitutions:
-  media_player_entity: media_player.bar_sonos # <- change this
+  media_player_entity: media_player.bar_sonos  # <- change this
 
   master_glyphs: " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
   master_glyphs_ext: "ÀÁÂÃÄÅÈÉÊËÌÍÎÏÒÓÔÕÖØÙÚÛÜàáâãäåèéêëìíîïòóôõöøùúûüÇçÑñÝýÿ“”‘’–—"
@@ -280,15 +280,13 @@ online_image:
     format: jpg
     resize: 280x280
 
+    on_error:
+      - lambda: |-
+          ESP_LOGE("art", "Artwork request FAILED (HTTP error). Loading placeholder.");
+          id(media_artwork).set_url("http://homeassistant.local:8123/local/placeholder.jpg");
+
     on_download_finished:
       - lambda: |-
-          if (id(media_artwork).is_failed()) {
-            lv_obj_add_flag(id(artwork_img), LV_OBJ_FLAG_HIDDEN);
-            lv_obj_add_flag(id(artwork_bg), LV_OBJ_FLAG_HIDDEN);
-            lv_obj_add_flag(id(metadata_container), LV_OBJ_FLAG_HIDDEN);
-            return;
-          }
-
           // Only unhide when NOT in TV or line_in
           std::string src = id(media_source).state;
           for (auto &c : src) c = tolower(c);
