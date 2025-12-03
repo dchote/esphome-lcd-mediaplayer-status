@@ -1,4 +1,6 @@
 # esphome-lcd-mediaplayer-status
+![Example of code running](images/running_on_panel.jpg)
+
 Homeassistant Media Player Status on waveshare-esp32-s3-touch-lcd-7 hardware.
 
 This code was almost entirely created using ChatGPT and many iterations to get something that actually works and looks good. 
