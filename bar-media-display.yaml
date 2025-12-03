@@ -1,5 +1,5 @@
 substitutions:
-  media_player_entity: media_player.bar_sonos  # <- change this
+  media_player_entity: media_player.bar_sonos # <- change this
 
   master_glyphs: " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
   master_glyphs_ext: "ÀÁÂÃÄÅÈÉÊËÌÍÎÏÒÓÔÕÖØÙÚÛÜàáâãäåèéêëìíîïòóôõöøùúûüÇçÑñÝýÿ“”‘’–—"
@@ -100,7 +100,6 @@ script:
 
           bool no_media_info = (src == "tv" || src == "line_in");
 
-          // Always hide metadata/artwork in TV/Line-in mode
           if (no_media_info) {
             lv_obj_add_flag(id(artwork_img), LV_OBJ_FLAG_HIDDEN);
             lv_obj_add_flag(id(artwork_bg), LV_OBJ_FLAG_HIDDEN);
@@ -111,7 +110,6 @@ script:
             return;
           }
 
-          // Normal mode
           if (st == "playing")        lv_label_set_text(id(status_label), "Playing");
           else if (st == "paused")    lv_label_set_text(id(status_label), "Paused");
           else if (st == "buffering") lv_label_set_text(id(status_label), "Buffering...");
@@ -137,7 +135,6 @@ script:
           bool no_media_info = (src == "tv" || src == "line_in");
           bool playing       = (st == "playing" || st == "buffering");
 
-          // ---- Always hide metadata/artwork on TV/Line-in ----
           if (no_media_info) {
             lv_obj_add_flag(id(artwork_img), LV_OBJ_FLAG_HIDDEN);
             lv_obj_add_flag(id(artwork_bg), LV_OBJ_FLAG_HIDDEN);
@@ -151,7 +148,6 @@ script:
             return;
           }
 
-          // ---- Normal mode ----
           if (!auto_off) {
             id(display_on).execute();
             lv_obj_clear_flag(id(artwork_img), LV_OBJ_FLAG_HIDDEN);
@@ -160,7 +156,6 @@ script:
             return;
           }
 
-          // Auto mode enabled
           if (playing) {
             id(display_on).execute();
             lv_obj_clear_flag(id(artwork_img), LV_OBJ_FLAG_HIDDEN);
@@ -269,7 +264,7 @@ time:
                 return std::string(buf);
 
 # -------------------------------------------------------------
-# ARTWORK LOADER
+# ARTWORK LOADER WITH SPINNER
 # -------------------------------------------------------------
 http_request:
 
@@ -282,12 +277,16 @@ online_image:
 
     on_error:
       - lambda: |-
-          ESP_LOGE("art", "Artwork request FAILED (HTTP error). Loading placeholder.");
+          ESP_LOGE("art", "Artwork request FAILED (HTTP error). Using placeholder.");
+          lv_obj_add_flag(id(artwork_spinner), LV_OBJ_FLAG_HIDDEN);
           id(media_artwork).set_url("http://homeassistant.local:8123/local/placeholder.jpg");
 
     on_download_finished:
       - lambda: |-
-          // Only unhide when NOT in TV or line_in
+          // Hide spinner when done
+          lv_obj_add_flag(id(artwork_spinner), LV_OBJ_FLAG_HIDDEN);
+
+          // Only show artwork in normal mode
           std::string src = id(media_source).state;
           for (auto &c : src) c = tolower(c);
           bool no_media_info = (src == "tv" || src == "line_in");
@@ -405,6 +404,9 @@ text_sensor:
             return "http://homeassistant.local:8123" + path;
 
       - lambda: |-
+          // Begin loading, show spinner
+          lv_obj_clear_flag(id(artwork_spinner), LV_OBJ_FLAG_HIDDEN);
+
           if (x == "IGNORE") {
             lv_obj_add_flag(id(artwork_img), LV_OBJ_FLAG_HIDDEN);
             lv_obj_add_flag(id(artwork_bg), LV_OBJ_FLAG_HIDDEN);
@@ -433,7 +435,7 @@ text_sensor:
 
 
 # -------------------------------------------------------------
-# LVGL UI — RESTORED EXACT VERSION
+# LVGL UI — WITH ARTWORK SPINNER
 # -------------------------------------------------------------
 lvgl:
   bg_color: 0x000000
@@ -453,7 +455,7 @@ lvgl:
 
   widgets:
 
-    # Toolbar (transparent)
+    # Toolbar
     - obj:
         id: toolbar
         width: 800
@@ -519,6 +521,22 @@ lvgl:
         pad_all: 4
         bg_color: 0x012A20
         bg_opa: COVER
+
+    # Artwork loading spinner
+    - spinner:
+        id: artwork_spinner
+        hidden: true
+        # align to the same parent as artwork_img
+        align: LEFT_MID
+        x: 138
+        y: 0
+        width: 60
+        height: 60
+        spin_time: 2s
+        arc_length: 40deg  
+        bg_opa: TRANSP
+        arc_opa: 50%
+        arc_color: 0x8A2E2E
 
     # Metadata block
     - obj:
