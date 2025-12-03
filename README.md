@@ -1,2 +1,16 @@
 # esphome-lcd-mediaplayer-status
-Homeassistant Media Player Status on waveshare-esp32-s3-touch-lcd-7 hardware
+Homeassistant Media Player Status on waveshare-esp32-s3-touch-lcd-7 hardware.
+
+This code was almost entirely created using ChatGPT and many iterations to get something that actually works and looks good. 
+It was initially based on the clock example from https://github.com/inytar/waveshare-esp32-s3-touch-lcd-7-esphome
+
+It is entirely self-contained and will display album art, track, artist, and album information.
+
+## Install requirements
+You will need to have the relevant fonts available for ESPHome to use. 
+- Download the NotoSans font from Google and place `NotoSans-VariableFont_wdth,wght.ttf` into `/config/esphome/fonts`.
+- Find and download `fa-solid-900.ttf` into `/config/esphome/fonts`.
+
+
+
+
