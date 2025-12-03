@@ -11,7 +11,7 @@ It is entirely self-contained and will display album art, track, artist, and alb
 I havent been able to get this to cleanly restart after OTAs, you will need to power cycle. This may be related to the waveshare library I'm using... Not sure
 
 ## Build Dependencies
-You will need to have the relevant fonts for ESPHome to include in the built. You can use the `Advanced SSH & Web Terminal` addon to get shell access and copy the files in to place.
+You will need to manually download fonts for ESPHome to use when building. I used the `Advanced SSH & Web Terminal` addon to get shell access and copy the files in to place.
 
 - Download the NotoSans font from Google and place `NotoSans-VariableFont_wdth,wght.ttf` into `/config/esphome/fonts`.
 - Find and download `fa-solid-900.ttf` into `/config/esphome/fonts`.
