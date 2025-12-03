@@ -24,7 +24,7 @@ wget https://github.com/dchote/esphome-lcd-mediaplayer-status/raw/refs/heads/mai
 
 cd /config/www
 
-wget https://github.com/dchote/esphome-lcd-mediaplayer-status/blob/main/dependencies/placeholder.jpg?raw=true
+wget https://github.com/dchote/esphome-lcd-mediaplayer-status/raw/refs/heads/main/dependencies/placeholder.jpg
 ```
 
 
