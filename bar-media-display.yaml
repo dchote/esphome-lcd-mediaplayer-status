@@ -16,9 +16,14 @@ esphome:
   on_boot:
     priority: -200
     then:
+      - lvgl.label.update:
+          id: status_label
+          text: "Starting up..."
       - delay: 800ms
-      - lambda: |-
-          ESP_LOGI("boot", "Boot stabilization delay complete");
+      - lambda: ESP_LOGI("boot", "Boot stabilization delay complete");
+      - lvgl.label.update:
+          id: status_label
+          text: "WiFi Connecting..."
 
 esp32:
   variant: esp32s3
@@ -36,12 +41,6 @@ api:
 ota:
   - platform: esphome
     password: "" # <- change this
-    on_end:
-      then:
-        - delay: 500ms
-        - lambda: |-
-            ESP_LOGI("ota", "OTA finished → forcing hard reboot");
-            esp_restart();
 
 safe_mode:
   reboot_timeout: 0s
@@ -58,11 +57,133 @@ captive_portal:
 globals:
   - id: lvgl_ready
     type: bool
-    restore_value: no
-    initial_value: 'false'
+    initial_value: "false"
 
 # -------------------------------------------------------------
-# Fonts
+# DISPLAY TOGGLE SWITCH
+# -------------------------------------------------------------
+switch:
+  - platform: template
+    id: auto_display_off
+    name: "Auto Display Off"
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    entity_category: config
+
+    turn_on_action:
+      - script.execute: update_display_power
+    turn_off_action:
+      - script.execute: update_display_power
+
+    on_turn_on:
+      - script.execute: update_display_power
+    on_turn_off:
+      - script.execute: update_display_power
+
+# -------------------------------------------------------------
+# DISPLAY + STATUS SCRIPTS
+# -------------------------------------------------------------
+script:
+
+  # -------- STATUS LABEL --------
+  - id: update_status_label
+    mode: restart
+    then:
+      - lambda: |-
+          std::string src = id(media_source).state;
+          std::string st  = id(media_state).state;
+
+          if (src.empty() || st.empty()) return;
+
+          for (auto &c : src) c = tolower(c);
+          for (auto &c : st)  c = tolower(c);
+
+          bool no_media_info = (src == "tv" || src == "line_in");
+
+          // Always hide metadata/artwork in TV/Line-in mode
+          if (no_media_info) {
+            lv_obj_add_flag(id(artwork_img), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(id(artwork_bg), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(id(metadata_container), LV_OBJ_FLAG_HIDDEN);
+
+            if (src == "tv")      lv_label_set_text(id(status_label), "TV");
+            if (src == "line_in") lv_label_set_text(id(status_label), "Line-In");
+            return;
+          }
+
+          // Normal mode
+          if (st == "playing")        lv_label_set_text(id(status_label), "Playing");
+          else if (st == "paused")    lv_label_set_text(id(status_label), "Paused");
+          else if (st == "buffering") lv_label_set_text(id(status_label), "Buffering...");
+          else if (st == "idle")      lv_label_set_text(id(status_label), "Not Playing");
+          else if (st == "off")       lv_label_set_text(id(status_label), "Off");
+          else                        lv_label_set_text(id(status_label), "Not Playing");
+
+
+  # -------- DISPLAY POWER + METADATA --------
+  - id: update_display_power
+    mode: restart
+    then:
+      - lambda: |-
+          std::string src = id(media_source).state;
+          std::string st  = id(media_state).state;
+          bool auto_off   = id(auto_display_off).state;
+
+          if (src.empty() || st.empty()) return;
+
+          for (auto &c : src) c = tolower(c);
+          for (auto &c : st)  c = tolower(c);
+
+          bool no_media_info = (src == "tv" || src == "line_in");
+          bool playing       = (st == "playing" || st == "buffering");
+
+          // ---- Always hide metadata/artwork on TV/Line-in ----
+          if (no_media_info) {
+            lv_obj_add_flag(id(artwork_img), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(id(artwork_bg), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(id(metadata_container), LV_OBJ_FLAG_HIDDEN);
+
+            if (auto_off)
+              id(display_off).execute();
+            else
+              id(display_on).execute();
+
+            return;
+          }
+
+          // ---- Normal mode ----
+          if (!auto_off) {
+            id(display_on).execute();
+            lv_obj_clear_flag(id(artwork_img), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_clear_flag(id(artwork_bg), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_clear_flag(id(metadata_container), LV_OBJ_FLAG_HIDDEN);
+            return;
+          }
+
+          // Auto mode enabled
+          if (playing) {
+            id(display_on).execute();
+            lv_obj_clear_flag(id(artwork_img), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_clear_flag(id(artwork_bg), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_clear_flag(id(metadata_container), LV_OBJ_FLAG_HIDDEN);
+          } else {
+            id(display_off).execute();
+            lv_obj_clear_flag(id(artwork_img), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_clear_flag(id(artwork_bg), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_clear_flag(id(metadata_container), LV_OBJ_FLAG_HIDDEN);
+          }
+
+  - id: display_off
+    then:
+      - light.turn_off: lcdbacklight
+
+  - id: display_on
+    then:
+      - light.turn_on: lcdbacklight
+
+
+# -------------------------------------------------------------
+# FONTS
 # -------------------------------------------------------------
 font:
   - file: "fonts/NotoSans-VariableFont_wdth,wght.ttf"
@@ -85,40 +206,49 @@ font:
     size: 22
     glyphs: "${master_glyphs}${master_glyphs_ext}"
 
+  - file: "fonts/NotoSans-VariableFont_wdth,wght.ttf"
+    id: font_18
+    size: 18
+    glyphs: "${master_glyphs}${master_glyphs_ext}"
+
   - file: "fonts/fa-solid-900.ttf"
     id: fa_wifi_24
     size: 24
     glyphs: "\uF1EB"
 
+
 # -------------------------------------------------------------
-# WiFi Connectivity
+# WIFI CONNECTIVITY
 # -------------------------------------------------------------
 binary_sensor:
   - platform: template
     id: wifi_connected
     internal: true
-    lambda: |-
-      return !isnan(id(wifi_rssi).state);
+    lambda: return !isnan(id(wifi_rssi).state);
 
     on_state:
       - lambda: |-
           bool ok = id(wifi_connected).state;
-          ESP_LOGI("wifi_debug", "wifi_connected = %s", ok ? "YES" : "NO");
-
           lv_obj_set_style_text_color(
             id(wifi_icon),
             lv_color_hex(ok ? 0x4AA382 : 0x8A2E2E),
             LV_PART_MAIN
           );
 
+      - if:
+          condition:
+            lambda: 'return id(lvgl_ready);'
+          then:
+            - script.execute: update_status_label
+
 sensor:
   - platform: wifi_signal
     id: wifi_rssi
-    disabled_by_default: true
     update_interval: 60s
+    disabled_by_default: true
 
 # -------------------------------------------------------------
-# Time (Clock)
+# TIME (CLOCK)
 # -------------------------------------------------------------
 time:
   - platform: homeassistant
@@ -132,14 +262,14 @@ time:
                 auto t = id(ha_time).now();
                 int hr = t.hour % 12;
                 if (hr == 0) hr = 12;
-                char buf[20];
+                char buf[32];
                 sprintf(buf, "%d:%02d %s",
                         hr, t.minute,
-                        (t.hour >= 12 ? "PM" : "AM"));
+                        t.hour >= 12 ? "PM" : "AM");
                 return std::string(buf);
 
 # -------------------------------------------------------------
-# Artwork Loader
+# ARTWORK LOADER
 # -------------------------------------------------------------
 http_request:
 
@@ -153,30 +283,32 @@ online_image:
     on_download_finished:
       - lambda: |-
           if (id(media_artwork).is_failed()) {
-            ESP_LOGW("art", "Artwork failed → fallback placeholder");
-
             lv_obj_add_flag(id(artwork_img), LV_OBJ_FLAG_HIDDEN);
             lv_obj_add_flag(id(artwork_bg), LV_OBJ_FLAG_HIDDEN);
             lv_obj_add_flag(id(metadata_container), LV_OBJ_FLAG_HIDDEN);
-
-            id(media_artwork).set_url("http://homeassistant.local:8123/local/placeholder.jpg");
-          } else {
-            ESP_LOGI("art", "Artwork OK");
-
-            lv_obj_clear_flag(id(artwork_img), LV_OBJ_FLAG_HIDDEN);
-            lv_obj_clear_flag(id(metadata_container), LV_OBJ_FLAG_HIDDEN);
-            lv_obj_clear_flag(id(artwork_bg), LV_OBJ_FLAG_HIDDEN);
+            return;
           }
+
+          // Only unhide when NOT in TV or line_in
+          std::string src = id(media_source).state;
+          for (auto &c : src) c = tolower(c);
+          bool no_media_info = (src == "tv" || src == "line_in");
+          if (no_media_info) return;
+
+          lv_obj_clear_flag(id(artwork_img), LV_OBJ_FLAG_HIDDEN);
+          lv_obj_clear_flag(id(artwork_bg), LV_OBJ_FLAG_HIDDEN);
+          lv_obj_clear_flag(id(metadata_container), LV_OBJ_FLAG_HIDDEN);
 
       - lvgl.image.update:
           id: artwork_img
           src: media_artwork
+
       - lvgl.image.update:
           id: artwork_bg
           src: media_artwork
 
 # -------------------------------------------------------------
-# Media Metadata
+# TEXT SENSORS — METADATA
 # -------------------------------------------------------------
 text_sensor:
 
@@ -187,7 +319,7 @@ text_sensor:
     on_value:
       - if:
           condition:
-            lambda: "return x.empty();"
+            lambda: 'return x.empty();'
           then:
             - lvgl.widget.hide: friendly_label
           else:
@@ -203,7 +335,7 @@ text_sensor:
     on_value:
       - if:
           condition:
-            lambda: "return x.empty();"
+            lambda: 'return x.empty();'
           then:
             - lvgl.widget.hide: title_label
           else:
@@ -219,7 +351,7 @@ text_sensor:
     on_value:
       - if:
           condition:
-            lambda: "return x.empty();"
+            lambda: 'return x.empty();'
           then:
             - lvgl.widget.hide: artist_label
           else:
@@ -235,7 +367,7 @@ text_sensor:
     on_value:
       - if:
           condition:
-            lambda: "return x.empty();"
+            lambda: 'return x.empty();'
           then:
             - lvgl.widget.hide: album_label
           else:
@@ -255,28 +387,24 @@ text_sensor:
           url: !lambda |-
             std::string path = x;
 
-            if (path.empty()) return std::string("IGNORE");
+            if (path.empty()) return "IGNORE";
 
             if (path.size() > 4) {
               std::string ext = path.substr(path.size() - 4);
               for (auto &c : ext) c = tolower(c);
-              if (ext == ".png")
-                return std::string("IGNORE");
+              if (ext == ".png") return "IGNORE";
             }
 
-            if (path.length() > 300)
-              return std::string("IGNORE");
+            if (path.length() > 300) return "IGNORE";
 
             if (path.rfind("http://", 0) == 0 ||
                 path.rfind("https://", 0) == 0)
               return path;
 
-            if (path.rfind("/api/media_player_proxy/", 0) == 0) {
-              return std::string("http://homeassistant.local:8123") +
-                     "/image_proxy" + path.substr(22);
-            }
+            if (path.rfind("/api/media_player_proxy/", 0) == 0)
+              return "http://homeassistant.local:8123/image_proxy" + path.substr(22);
 
-            return std::string("http://homeassistant.local:8123") + path;
+            return "http://homeassistant.local:8123" + path;
 
       - lambda: |-
           if (x == "IGNORE") {
@@ -284,20 +412,30 @@ text_sensor:
             lv_obj_add_flag(id(artwork_bg), LV_OBJ_FLAG_HIDDEN);
           }
 
+# -----------------------------------------------------------
+# MEDIA STATE SENSOR
+# -----------------------------------------------------------
   - platform: homeassistant
     id: media_state
     entity_id: ${media_player_entity}
-    attribute: state
     on_value:
-      - lambda: |-
-          std::string st = x;
-          for (auto &c : st) c = tolower(c);
-          bool playing = (st == "playing" || st == "buffering");
-          if (playing) id(lcdbacklight).turn_on();
-          else id(lcdbacklight).turn_off();
+      - script.execute: update_status_label
+      - script.execute: update_display_power
+
+# -----------------------------------------------------------
+# MEDIA SOURCE SENSOR
+# -----------------------------------------------------------
+  - platform: homeassistant
+    id: media_source
+    entity_id: ${media_player_entity}
+    attribute: source
+    on_value:
+      - script.execute: update_status_label
+      - script.execute: update_display_power
+
 
 # -------------------------------------------------------------
-# LVGL UI
+# LVGL UI — RESTORED EXACT VERSION
 # -------------------------------------------------------------
 lvgl:
   bg_color: 0x000000
@@ -340,6 +478,13 @@ lvgl:
               align: LEFT_MID
               text_font: font_22
               text_color: 0xD4A450
+
+          - label:
+              id: status_label
+              text: "Starting..."
+              align: CENTER
+              text_font: font_18
+              text_color: 0x777777
 
           - label:
               id: wifi_icon
