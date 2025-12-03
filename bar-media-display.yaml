@@ -1,0 +1,437 @@
+substitutions:
+  media_player_entity: media_player.bar_sonos # <- change this
+
+  master_glyphs: " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~"
+  master_glyphs_ext: "ÀÁÂÃÄÅÈÉÊËÌÍÎÏÒÓÔÕÖØÙÚÛÜàáâãäåèéêëìíîïòóôõöøùúûüÇçÑñÝýÿ“”‘’–—"
+
+packages:
+  waveshare:
+    url: https://github.com/inytar/waveshare-esp32-s3-touch-lcd-7-esphome
+    files: [ waveshare-esp32-s3-touch-lcd-7.yaml ]
+
+esphome:
+  name: bar-media-display
+  friendly_name: bar-media-display
+
+  on_boot:
+    priority: -200
+    then:
+      - delay: 800ms
+      - lambda: |-
+          ESP_LOGI("boot", "Boot stabilization delay complete");
+
+esp32:
+  variant: esp32s3
+  flash_size: 8MB
+  cpu_frequency: 240MHz
+  framework:
+    type: esp-idf
+
+logger:
+
+api:
+  encryption:
+    key: "" # <- change this
+
+ota:
+  - platform: esphome
+    password: "" # <- change this
+    on_end:
+      then:
+        - delay: 500ms
+        - lambda: |-
+            ESP_LOGI("ota", "OTA finished → forcing hard reboot");
+            esp_restart();
+
+safe_mode:
+  reboot_timeout: 0s
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: "Bar-Media-Display"
+    password: "" # <- change this
+
+captive_portal:
+
+globals:
+  - id: lvgl_ready
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+# -------------------------------------------------------------
+# Fonts
+# -------------------------------------------------------------
+font:
+  - file: "fonts/NotoSans-VariableFont_wdth,wght.ttf"
+    id: font_40
+    size: 40
+    glyphs: "${master_glyphs}${master_glyphs_ext}"
+
+  - file: "fonts/NotoSans-VariableFont_wdth,wght.ttf"
+    id: font_32
+    size: 32
+    glyphs: "${master_glyphs}${master_glyphs_ext}"
+
+  - file: "fonts/NotoSans-VariableFont_wdth,wght.ttf"
+    id: font_26
+    size: 26
+    glyphs: "${master_glyphs}${master_glyphs_ext}"
+
+  - file: "fonts/NotoSans-VariableFont_wdth,wght.ttf"
+    id: font_22
+    size: 22
+    glyphs: "${master_glyphs}${master_glyphs_ext}"
+
+  - file: "fonts/fa-solid-900.ttf"
+    id: fa_wifi_24
+    size: 24
+    glyphs: "\uF1EB"
+
+# -------------------------------------------------------------
+# WiFi Connectivity
+# -------------------------------------------------------------
+binary_sensor:
+  - platform: template
+    id: wifi_connected
+    internal: true
+    lambda: |-
+      return !isnan(id(wifi_rssi).state);
+
+    on_state:
+      - lambda: |-
+          bool ok = id(wifi_connected).state;
+          ESP_LOGI("wifi_debug", "wifi_connected = %s", ok ? "YES" : "NO");
+
+          lv_obj_set_style_text_color(
+            id(wifi_icon),
+            lv_color_hex(ok ? 0x4AA382 : 0x8A2E2E),
+            LV_PART_MAIN
+          );
+
+sensor:
+  - platform: wifi_signal
+    id: wifi_rssi
+    disabled_by_default: true
+    update_interval: 60s
+
+# -------------------------------------------------------------
+# Time (Clock)
+# -------------------------------------------------------------
+time:
+  - platform: homeassistant
+    id: ha_time
+    on_time:
+      - seconds: 0
+        then:
+          - lvgl.label.update:
+              id: clock_label
+              text: !lambda |-
+                auto t = id(ha_time).now();
+                int hr = t.hour % 12;
+                if (hr == 0) hr = 12;
+                char buf[20];
+                sprintf(buf, "%d:%02d %s",
+                        hr, t.minute,
+                        (t.hour >= 12 ? "PM" : "AM"));
+                return std::string(buf);
+
+# -------------------------------------------------------------
+# Artwork Loader
+# -------------------------------------------------------------
+http_request:
+
+online_image:
+  - id: media_artwork
+    url: "http://homeassistant.local:8123/local/placeholder.jpg"
+    type: RGB565
+    format: jpg
+    resize: 280x280
+
+    on_download_finished:
+      - lambda: |-
+          if (id(media_artwork).is_failed()) {
+            ESP_LOGW("art", "Artwork failed → fallback placeholder");
+
+            lv_obj_add_flag(id(artwork_img), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(id(artwork_bg), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(id(metadata_container), LV_OBJ_FLAG_HIDDEN);
+
+            id(media_artwork).set_url("http://homeassistant.local:8123/local/placeholder.jpg");
+          } else {
+            ESP_LOGI("art", "Artwork OK");
+
+            lv_obj_clear_flag(id(artwork_img), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_clear_flag(id(metadata_container), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_clear_flag(id(artwork_bg), LV_OBJ_FLAG_HIDDEN);
+          }
+
+      - lvgl.image.update:
+          id: artwork_img
+          src: media_artwork
+      - lvgl.image.update:
+          id: artwork_bg
+          src: media_artwork
+
+# -------------------------------------------------------------
+# Media Metadata
+# -------------------------------------------------------------
+text_sensor:
+
+  - platform: homeassistant
+    id: media_friendly
+    entity_id: ${media_player_entity}
+    attribute: friendly_name
+    on_value:
+      - if:
+          condition:
+            lambda: "return x.empty();"
+          then:
+            - lvgl.widget.hide: friendly_label
+          else:
+            - lvgl.label.update:
+                id: friendly_label
+                text: !lambda "return x;"
+            - lvgl.widget.show: friendly_label
+
+  - platform: homeassistant
+    id: media_title
+    entity_id: ${media_player_entity}
+    attribute: media_title
+    on_value:
+      - if:
+          condition:
+            lambda: "return x.empty();"
+          then:
+            - lvgl.widget.hide: title_label
+          else:
+            - lvgl.label.update:
+                id: title_label
+                text: !lambda "return x;"
+            - lvgl.widget.show: title_label
+
+  - platform: homeassistant
+    id: media_artist
+    entity_id: ${media_player_entity}
+    attribute: media_artist
+    on_value:
+      - if:
+          condition:
+            lambda: "return x.empty();"
+          then:
+            - lvgl.widget.hide: artist_label
+          else:
+            - lvgl.label.update:
+                id: artist_label
+                text: !lambda "return x;"
+            - lvgl.widget.show: artist_label
+
+  - platform: homeassistant
+    id: media_album
+    entity_id: ${media_player_entity}
+    attribute: media_album_name
+    on_value:
+      - if:
+          condition:
+            lambda: "return x.empty();"
+          then:
+            - lvgl.widget.hide: album_label
+          else:
+            - lvgl.label.update:
+                id: album_label
+                text: !lambda "return x;"
+            - lvgl.widget.show: album_label
+
+  - platform: homeassistant
+    id: media_artwork_path
+    entity_id: ${media_player_entity}
+    attribute: entity_picture
+
+    on_value:
+      - online_image.set_url:
+          id: media_artwork
+          url: !lambda |-
+            std::string path = x;
+
+            if (path.empty()) return std::string("IGNORE");
+
+            if (path.size() > 4) {
+              std::string ext = path.substr(path.size() - 4);
+              for (auto &c : ext) c = tolower(c);
+              if (ext == ".png")
+                return std::string("IGNORE");
+            }
+
+            if (path.length() > 300)
+              return std::string("IGNORE");
+
+            if (path.rfind("http://", 0) == 0 ||
+                path.rfind("https://", 0) == 0)
+              return path;
+
+            if (path.rfind("/api/media_player_proxy/", 0) == 0) {
+              return std::string("http://homeassistant.local:8123") +
+                     "/image_proxy" + path.substr(22);
+            }
+
+            return std::string("http://homeassistant.local:8123") + path;
+
+      - lambda: |-
+          if (x == "IGNORE") {
+            lv_obj_add_flag(id(artwork_img), LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(id(artwork_bg), LV_OBJ_FLAG_HIDDEN);
+          }
+
+  - platform: homeassistant
+    id: media_state
+    entity_id: ${media_player_entity}
+    attribute: state
+    on_value:
+      - lambda: |-
+          std::string st = x;
+          for (auto &c : st) c = tolower(c);
+          bool playing = (st == "playing" || st == "buffering");
+          if (playing) id(lcdbacklight).turn_on();
+          else id(lcdbacklight).turn_off();
+
+# -------------------------------------------------------------
+# LVGL UI
+# -------------------------------------------------------------
+lvgl:
+  bg_color: 0x000000
+  bg_opa: COVER
+
+  on_ready:
+    - lambda: |-
+        id(lvgl_ready) = true;
+        ESP_LOGI("lvgl", "LVGL ready");
+        lv_obj_add_flag(id(artwork_img), LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(id(artwork_bg), LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(id(metadata_container), LV_OBJ_FLAG_HIDDEN);
+    - lvgl.widget.hide: friendly_label
+    - lvgl.widget.hide: title_label
+    - lvgl.widget.hide: artist_label
+    - lvgl.widget.hide: album_label
+
+  widgets:
+
+    # Toolbar (transparent)
+    - obj:
+        id: toolbar
+        width: 800
+        height: 50
+        align: TOP_MID
+        bg_opa: TRANSP
+        border_width: 0
+        shadow_width: 0
+        outline_width: 0
+        pad_left: 12
+        pad_right: 12
+        pad_top: 6
+        pad_bottom: 6
+
+        widgets:
+          - label:
+              id: friendly_label
+              hidden: true
+              text: ""
+              align: LEFT_MID
+              text_font: font_22
+              text_color: 0xD4A450
+
+          - label:
+              id: wifi_icon
+              text: "\uF1EB"
+              align: RIGHT_MID
+              text_font: fa_wifi_24
+              text_color: 0x8A2E2E
+
+    # Background artwork
+    - image:
+        id: artwork_bg
+        hidden: true
+        src: media_artwork
+        align: CENTER
+        width: 800
+        height: 480
+        zoom: 6.0
+        opa: 15%
+        bg_opa: TRANSP
+
+    # Foreground artwork
+    - image:
+        id: artwork_img
+        hidden: true
+        src: media_artwork
+        align: LEFT_MID
+        x: 40
+        y: 0
+        width: 260
+        height: 260
+        radius: 10
+        border_color: 0xD4A450
+        border_width: 4
+        pad_all: 4
+        bg_color: 0x012A20
+        bg_opa: COVER
+
+    # Metadata block
+    - obj:
+        id: metadata_container
+        hidden: true
+        align: LEFT_MID
+        x: 320
+        y: 0
+        width: 460
+        height: 220
+        bg_opa: TRANSP
+        border_width: 0
+        shadow_width: 0
+        outline_width: 0
+        pad_all: 0
+        scrollable: false
+
+        widgets:
+          - label:
+              id: title_label
+              hidden: true
+              align: TOP_RIGHT
+              width: 460
+              long_mode: SCROLL_CIRCULAR
+              text: ""
+              text_font: font_40
+              text_color: 0xEEDFC7
+
+          - label:
+              id: artist_label
+              hidden: true
+              align: RIGHT_MID
+              y: -20
+              width: 460
+              long_mode: SCROLL_CIRCULAR
+              text: ""
+              text_font: font_32
+              text_color: 0xD4A450
+
+          - label:
+              id: album_label
+              hidden: true
+              align: RIGHT_MID
+              y: 60
+              width: 460
+              long_mode: SCROLL_CIRCULAR
+              text: ""
+              text_font: font_26
+              text_color: 0xB8B8B8
+
+    # Clock
+    - label:
+        id: clock_label
+        align: BOTTOM_RIGHT
+        x: -25
+        y: -25
+        text: "--:--"
+        text_font: font_40
+        text_color: 0xD4A450
