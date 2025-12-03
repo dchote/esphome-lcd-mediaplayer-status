@@ -17,21 +17,14 @@ You will need to manually download fonts for ESPHome to use when building. I use
 
 ```
 mkdir /config/esphome/fonts
-
 cd /config/esphome/fonts
 
-wget ...
-wget ...
+wget https://github.com/dchote/esphome-lcd-mediaplayer-status/raw/refs/heads/main/dependencies/Noto_Sans/NotoSans-Italic-VariableFont_wdth,wght.ttf
+wget https://github.com/dchote/esphome-lcd-mediaplayer-status/raw/refs/heads/main/dependencies/Font_Awesome/fa-solid-900.ttf
 
 cd /config/www
 
-wget ...
+wget https://github.com/dchote/esphome-lcd-mediaplayer-status/blob/main/dependencies/placeholder.jpg?raw=true
 ```
-
-- Download the NotoSans font from Google and place `NotoSans-VariableFont_wdth,wght.ttf` into `/config/esphome/fonts`.
-- Find and download `fa-solid-900.ttf` into `/config/esphome/fonts`.
-- Land a jpeg at `/config/www/placeholder.jpg` to become the placeholder album art image.
-
-
 
 
